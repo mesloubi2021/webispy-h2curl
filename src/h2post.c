@@ -30,11 +30,14 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+#ifdef _WIN32
+#include <time.h>
+#else
 #include <sys/eventfd.h>
-
 /* somewhat unix-specific */
 #include <sys/time.h>
 #include <unistd.h>
+#endif
 
 /* curl stuff */
 #include <curl/curl.h>
@@ -51,7 +54,7 @@
 
 #define NUM_HANDLES 1000
 
-#define SERVER_URL "https://127.0.0.1:8081"
+#define SERVER_URL "https://127.5.5.5:8081"
 #define PATH_GET SERVER_URL "/longPolling"
 #define PATH_POST SERVER_URL "/post"
 
@@ -70,7 +73,7 @@ static size_t read_callback(char *ptr, size_t size, size_t nmemb, void *userp)
 
 	/* read 100 bytes per each callback */
 	size_t retcode = fread(ptr, 1, 100, i->in);
-	printf("\n\e[7mread %zd bytes from file\e[0m\n\n", retcode);
+	printf("\nread %" FORMAT_SIZE_T " bytes from file\n\n", retcode);
 
 	return retcode;
 }
@@ -92,8 +95,8 @@ static void setup_post(struct input *i, const char *upload)
 		exit(1);
 	}
 
-	uploadsize = file_info.st_size;
-	printf("\nuploadsize = %zd\n\n", uploadsize);
+	uploadsize = (curl_off_t)file_info.st_size;
+	printf("\nuploadsize = %" CURL_FORMAT_CURL_OFF_T "\n\n", uploadsize);
 
 	i->in = fopen(upload, "rb");
 	if (!i->in)
@@ -104,7 +107,7 @@ static void setup_post(struct input *i, const char *upload)
 		exit(1);
 	}
 
-	printf("\n\e[1m> PATH " PATH_POST "\e[0m\n\n");
+	printf("\n> PATH " PATH_POST "\n\n");
 
 	/* we want to use our own read function */
 	curl_easy_setopt(hnd, CURLOPT_POST, 1L);
@@ -149,7 +152,7 @@ static void setup_get(struct input *i)
 	hnd = i->hnd = curl_easy_init();
 	i->headers = NULL;
 
-	printf("\n\e[1m> GET " PATH_GET "\e[0m\n\n");
+	printf("\n> GET " PATH_GET "\n\n");
 
 	/* set the same URL */
 	curl_easy_setopt(hnd, CURLOPT_URL, PATH_GET);
@@ -177,7 +180,7 @@ static void setup_get(struct input *i)
  */
 int main(int argc, char **argv)
 {
-	struct input trans[NUM_HANDLES];
+	struct input trans[NUM_HANDLES] = {0};
 	CURLM *multi_handle;
 	int i;
 	int still_running = 0; /* keep number of running handles */
@@ -232,9 +235,12 @@ int main(int argc, char **argv)
 
 	for (i = 0; i < num_transfers; i++)
 	{
-		curl_multi_remove_handle(multi_handle, trans[i].hnd);
-		curl_slist_free_all(trans[i].headers);
-		curl_easy_cleanup(trans[i].hnd);
+    if(trans[i].hnd) {
+		  curl_multi_remove_handle(multi_handle, trans[i].hnd);
+      if(trans[i].headers)
+		    curl_slist_free_all(trans[i].headers);
+		  curl_easy_cleanup(trans[i].hnd);
+    }
 	}
 
 	return 0;

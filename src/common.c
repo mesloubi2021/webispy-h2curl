@@ -112,3 +112,35 @@ int my_trace(CURL *handle, curl_infotype type, char *data, size_t size,
 
 	return 0;
 }
+
+#ifdef _WIN32
+
+/* FILETIME of Jan 1 1970 00:00:00, the PostgreSQL epoch */
+static const unsigned __int64 epoch = 116444736000000000ui64;
+
+/*
+ * FILETIME represents the number of 100-nanosecond intervals since
+ * January 1, 1601 (UTC).
+ */
+#define FILETIME_UNITS_PER_SEC	10000000L
+#define FILETIME_UNITS_PER_USEC 10
+
+// This function copied from PostgreSQL
+// https://git.postgresql.org/gitweb/?p=postgresql.git;a=blob_plain;f=src/port/gettimeofday.c;hb=HEAD
+int gettimeofday(struct timeval *tp, void *tzp)
+{
+	FILETIME	file_time;
+	ULARGE_INTEGER ularge;
+
+	GetSystemTimePreciseAsFileTime(&file_time);
+	ularge.LowPart = file_time.dwLowDateTime;
+	ularge.HighPart = file_time.dwHighDateTime;
+
+	tp->tv_sec = (long) ((ularge.QuadPart - epoch) / FILETIME_UNITS_PER_SEC);
+	tp->tv_usec = (long) (((ularge.QuadPart - epoch) % FILETIME_UNITS_PER_SEC)
+						  / FILETIME_UNITS_PER_USEC);
+
+	return 0;
+}
+
+#endif // _WIN32
